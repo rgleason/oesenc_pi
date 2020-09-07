@@ -17,7 +17,7 @@ execute_process(
 )
 
 if (OCPN_FLATPAK)
-    set(PKG_TARGET "flatpak")
+    set(PKG_TARGET "flatpak-x86_64")
     set(PKG_TARGET_VERSION "18.08")    # As of flatpak/*yaml
 elseif (MINGW)
     set(PKG_TARGET "mingw")
@@ -39,12 +39,48 @@ elseif (APPLE)
     set(PKG_TARGET "darwin")
     execute_process(COMMAND "sw_vers" "-productVersion"
                     OUTPUT_VARIABLE PKG_TARGET_VERSION)
+elseif(_wx_selected_config MATCHES "androideabi-qt-arm64")
+     #Android is cross built, so set wxWidgets dependies directly, elsewhere
+     set(wxWidgets_LIBRARIES FOOBAT)
+     set(PKG_TARGET "Android-ARM64")
+     set(PKG_TARGET_VERSION 16)
+     set(ARCH arm64)              
+elseif(_wx_selected_config MATCHES "androideabi-qt-armhf")
+     #Android is cross built, so set wxWidgets dependies directly, elsewhere
+     set(wxWidgets_LIBRARIES FOOBAT)
+     set(PKG_TARGET "Android-ARMHF")
+     set(PKG_TARGET_VERSION 16)
+     set(ARCH armhf)              
 elseif (UNIX)
     # Some linux dist:
     execute_process(COMMAND "lsb_release" "-is"
-                    OUTPUT_VARIABLE PKG_TARGET)
+                    OUTPUT_VARIABLE PKG_TARGET
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
     execute_process(COMMAND "lsb_release" "-rs"
-                    OUTPUT_VARIABLE PKG_TARGET_VERSION)
+                    OUTPUT_VARIABLE PKG_TARGET_VERSION
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+
+    # Handle gtk3 build variant           
+    string(STRIP "${PKG_TARGET}" PKG_TARGET)
+    string(TOLOWER "${PKG_TARGET}" PKG_TARGET)
+    if (NOT DEFINED wxWidgets_LIBRARIES)
+        message(FATAL_ERROR "PluginSetup: required wxWidgets_LIBRARIES missing")
+    elseif ("${wxWidgets_LIBRARIES}" MATCHES "gtk3u" AND PKG_TARGET STREQUAL "ubuntu")
+        message(STATUS "PluginSetup: gtk3 found")
+        set(PKG_TARGET "${PKG_TARGET}-gtk3")
+    endif ()
+
+    # Generate architecturally uniques names for linux output packages
+    if(ARCH MATCHES "arm64")
+        set(PKG_TARGET "${PKG_TARGET}-ARM64")
+    elseif(ARCH MATCHES "armhf")
+        set(PKG_TARGET "${PKG_TARGET}-ARMHF")
+    elseif(ARCH MATCHES "i386")
+        set(PKG_TARGET "${PKG_TARGET}-i386")
+    else ()
+        set(PKG_TARGET "${PKG_TARGET}-x86_64")
+    endif ()
 else ()
     set(PKG_TARGET "unknown")
     set(PKG_TARGET_VERSION 1)
@@ -56,8 +92,6 @@ string(TOLOWER "${PKG_TARGET}" PKG_TARGET)
 string(STRIP "${PKG_TARGET_VERSION}" PKG_TARGET_VERSION)
 string(TOLOWER "${PKG_TARGET_VERSION}" PKG_TARGET_VERSION)
 set(PKG_TARGET_NVR "${PKG_TARGET}-${PKG_TARGET_VERSION}")
-if (NOT DEFINED wxWidgets_LIBRARIES)
-  message(FATAL_ERROR "PluginSetup: required wxWidgets_LIBRARIES missing")
-elseif ("${wxWidgets_LIBRARIES}" MATCHES "gtk3u" AND PKG_TARGET STREQUAL "ubuntu")
-  set(PKG_TARGET "${PKG_TARGET}-gtk3")
-endif ()
+
+message(STATUS "PluginSetup: PKG_TARGET: ${PKG_TARGET}")
+message(STATUS "PluginSetup: PKG_TARGET_VERSION: ${PKG_TARGET_VERSION}")

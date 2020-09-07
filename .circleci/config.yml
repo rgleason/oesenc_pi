@@ -100,16 +100,6 @@ jobs:
        - checkout
        - run: ci/circleci-build-flatpak.sh
        - run: ci/circleci-upload-flatpak.sh
-   build-fedora:
-     docker:
-         - image: fedora:29
-     environment:
-       - OCPN_TARGET:  fedora
-     steps:
-       - run: su -c "dnf install -q -y git openssh-clients openssh-server"
-       - checkout
-       - run: ci/circleci-build-fedora.sh
-       - run: ci/circleci-upload.sh
    build-mingw:
      docker:
          - image: fedora:29
@@ -129,6 +119,26 @@ jobs:
        - checkout
        - run: ci/circleci-build-macos.sh
        - run: ci/circleci-upload.sh
+   build-android-arm64:
+     docker:
+       - image: circleci/android:api-28-ndk 
+     environment:
+       - OCPN_TARGET:  android-arm64
+     steps:
+       - checkout
+       - run: ci/circleci-build-android-arm64.sh
+       - run: ci/circleci-upload.sh
+   build-android-armhf:
+     docker:
+       - image: circleci/android:api-28-ndk 
+     environment:
+       - OCPN_TARGET:  android-armhf
+     steps:
+       - checkout
+       - run: ci/circleci-build-android-armhf.sh
+       - run: ci/circleci-upload.sh
+
+       
 workflows:
   version: 2
   build_all:
@@ -161,15 +171,19 @@ workflows:
           filters:
             branches:
               only: master
-      - build-fedora:
-          filters:
-            branches:
-              only: master
       - build-macos:
           filters:
             branches:
               only: master
       - build-mingw:
+          filters:
+            branches:
+              only: master
+      - build-android-arm64:
+          filters:
+            branches:
+              only: master
+      - build-android-armhf:
           filters:
             branches:
               only: master

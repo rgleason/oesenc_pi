@@ -28,7 +28,7 @@
 #include "pi_DepthFont.h"
 
 #ifdef USE_ANDROID_GLES2
-#include <gl2.h>
+#include "../include/GLES/gl2.h"
 #include "linmath.h"
 #include "shaders.h"
 #else
@@ -98,7 +98,7 @@ void DepthFont::Build( wxFont *font, double scale )
         sdc.GetTextExtent( text, &gw, &gh, &descent, &exlead, font ); // measure the text
 
         tgi[i].width = gw;
-        tgi[i].height = gh - descent;
+        tgi[i].height = gh;// - descent;
 
         tgi[i].advance = gw;
         

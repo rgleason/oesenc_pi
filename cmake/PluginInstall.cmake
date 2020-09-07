@@ -4,9 +4,9 @@
 ## License:     GPLv3+
 ##---------------------------------------------------------------------------
 
-IF(NOT APPLE)
+IF(NOT APPLE AND NOT QT_ANDROID)
   TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} ${wxWidgets_LIBRARIES} ${PLUGINS_LIBS} )
-ENDIF(NOT APPLE)
+ENDIF(NOT APPLE AND NOT QT_ANDROID)
 
 IF(WIN32)
   SET(PARENT "opencpn")
@@ -74,7 +74,7 @@ IF (NOT WIN32)
     SET (PACKAGE_RECS "xcalib,xdg-utils")
     SET (LIB_INSTALL_DIR "lib")
     IF (CMAKE_SIZEOF_VOID_P MATCHES "8")
-      SET (ARCH "amd64")
+      SET (ARCH "x86_64")
 #      SET (LIB_INSTALL_DIR "lib64")
     ELSE (CMAKE_SIZEOF_VOID_P MATCHES "8")
       SET (ARCH "i386")

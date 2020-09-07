@@ -59,9 +59,9 @@
 #include "sha1.h"
 #include "InstallDirs.h"
 
-#ifndef __OCPN__ANDROID__
+//#ifndef __OCPN__ANDROID__
 #include "ochartShop.h"
-#endif
+//#endif
 
 #include "version.h"
 
@@ -747,6 +747,20 @@ int oesenc_pi::Init(void)
     
     g_ChartInfoArray.Clear();
    
+#ifdef __OCPN__ANDROID__
+    g_deviceInfo = callActivityMethod_vs("getDeviceInfo");
+    
+    wxStringTokenizer tkz(g_deviceInfo, _T("\n"));
+    while( tkz.HasMoreTokens() )
+    {
+        wxString s1 = tkz.GetNextToken();
+        if(wxNOT_FOUND != s1.Find(_T("systemName:"))){
+            g_systemName = s1.AfterFirst(':');
+        }
+    }
+    qDebug() << "Init() systemName by deviceInfo: " << g_systemName.mb_str();
+#endif
+    
     //testSENCServer();
     
     int flags =  INSTALLS_PLUGIN_CHART_GL |
@@ -885,6 +899,9 @@ void oesenc_pi::SetPluginMessage(wxString &message_id, wxString &message_body)
                 if(needReconfig){
                     ps52plib->PLIB_LoadS57GlobalConfig();
                     ps52plib->PLIB_LoadS57ObjectConfig();
+                    
+                    // Set the chart object scale factor, it may have changed.
+                    g_ChartScaleFactorExp = GetOCPNChartScaleFactor_Plugin();
                 }
             }
 
@@ -905,6 +922,7 @@ void oesenc_pi::SetPluginMessage(wxString &message_id, wxString &message_body)
             if(root[_T("OpenCPN S52PLIB SymbolStyle")].IsInt())           ps52plib->m_nSymbolStyle = (LUPname)root[_T("OpenCPN S52PLIB SymbolStyle")].AsInt();
             if(root[_T("OpenCPN S52PLIB BoundaryStyle")].IsInt())         ps52plib->m_nBoundaryStyle = (LUPname)root[_T("OpenCPN S52PLIB BoundaryStyle")].AsInt();
             if(root[_T("OpenCPN S52PLIB ColorShades")].IsDouble())        S52_setMarinerParam( S52_MAR_TWO_SHADES, root[_T("OpenCPN S52PLIB ColorShades")].AsDouble());
+            if(root[_T("OpenCPN S52PLIB SoundingsFactor")].IsInt())       ps52plib->m_nSoundingFactor = root[_T("OpenCPN S52PLIB SoundingsFactor")].AsInt();
 
             int icat;
             if( root[_T("OpenCPN S52PLIB DisplayCategory")].AsInt(icat) ){
@@ -1412,7 +1430,12 @@ bool oesenc_pi::LoadConfig( void )
         pConf->Read( _T("DEBUG_SERVER"), &g_serverDebug);
         pConf->Read( _T("DEBUG_LEVEL"), &g_debugLevel);
 
-        pConf->Read( _T("systemName"), &g_systemName);
+        // On initial start, do not override g_systemName as populated in Init() method
+        wxString snTest;
+        pConf->Read( _T("systemName"), &snTest);
+        if(snTest.Length() && g_systemName.IsEmpty())
+            g_systemName = snTest;
+        
         pConf->Read( _T("loginUser"), &g_loginUser);
         pConf->Read( _T("loginKey"), &g_loginKey);
         pConf->Read( _T("ADMIN"), &g_admin);
@@ -3698,7 +3721,7 @@ oesencPrefsDialog::oesencPrefsDialog( wxWindow* parent, wxWindowID id, const wxS
         m_buttonShowEULA->Connect( wxEVT_COMMAND_BUTTON_CLICKED,wxCommandEventHandler(oesenc_pi_event_handler::OnShowEULA), NULL, g_event_handler );
         bSizer2->AddSpacer( 20 );
 
-#ifndef __OCPN__ANDROID__        
+//#ifndef __OCPN__ANDROID__        
         //  FPR File Permit
         wxStaticBoxSizer* sbSizerFPR= new wxStaticBoxSizer( new wxStaticBox( content, wxID_ANY, _("System Identification") ), wxHORIZONTAL );
         m_fpr_text = new wxStaticText(content, wxID_ANY, _T(" "));
@@ -3717,14 +3740,12 @@ oesencPrefsDialog::oesencPrefsDialog( wxWindow* parent, wxWindowID id, const wxS
         
         m_buttonNewFPR->Connect( wxEVT_COMMAND_BUTTON_CLICKED,wxCommandEventHandler(oesenc_pi_event_handler::OnNewFPRClick), NULL, g_event_handler );
 
-#ifndef OCPN_ARM64        
         m_buttonNewDFPR = new wxButton( content, wxID_ANY, _("Create USB key dongle System ID file..."), wxDefaultPosition, wxDefaultSize, 0 );
         
         bSizer2->AddSpacer( 5 );
         bSizer2->Add( m_buttonNewDFPR, 0, wxALIGN_CENTER_HORIZONTAL, 50 );
         
         m_buttonNewDFPR->Connect( wxEVT_COMMAND_BUTTON_CLICKED,wxCommandEventHandler(oesenc_pi_event_handler::OnNewDFPRClick), NULL, g_event_handler );
-#endif
             
 #ifdef __WXMAC__
         m_buttonShowFPR = new wxButton( content, wxID_ANY, _("Show In Finder"), wxDefaultPosition, wxDefaultSize, 0 );
@@ -3738,7 +3759,7 @@ oesencPrefsDialog::oesencPrefsDialog( wxWindow* parent, wxWindowID id, const wxS
 
         m_buttonShowFPR->Connect( wxEVT_COMMAND_BUTTON_CLICKED,wxCommandEventHandler(oesenc_pi_event_handler::OnShowFPRClick), NULL, g_event_handler );
 
-#endif        
+//#endif        
         // System Name
         if(g_systemName.Length()){
             wxString nameText = _T(" ") + _("System Name:") + _T(" ") + g_systemName;
@@ -3749,7 +3770,7 @@ oesencPrefsDialog::oesencPrefsDialog( wxWindow* parent, wxWindowID id, const wxS
         else
             bSizer2->AddSpacer( 10 );
  
-#ifndef __OCPN__ANDROID__        
+//#ifndef __OCPN__ANDROID__        
         m_buttonClearSystemName = new wxButton( content, wxID_ANY, _("Reset System Name"), wxDefaultPosition, wxDefaultSize, 0 );
         
         bSizer2->AddSpacer( 10 );
@@ -3768,7 +3789,7 @@ oesencPrefsDialog::oesencPrefsDialog( wxWindow* parent, wxWindowID id, const wxS
         m_buttonClearCreds->Connect( wxEVT_COMMAND_BUTTON_CLICKED,wxCommandEventHandler(oesenc_pi_event_handler::OnClearCredentials), NULL, g_event_handler );
         
         
-#endif
+//#endif
             
         m_sdbSizer1 = new wxStdDialogButtonSizer();
         m_sdbSizer1OK = new wxButton( content, wxID_OK );
@@ -3836,7 +3857,6 @@ void androidGetDeviceName()
 bool IsDongleAvailable()
 {
 #ifndef __OCPN__ANDROID__    
-#ifndef OCPN_ARM64  // SGlock is not supported for ARM64
     wxString cmd = g_sencutil_bin;
     cmd += _T(" -s ");                  // Available?
 
@@ -3875,7 +3895,6 @@ bool IsDongleAvailable()
 
     //g_sencutil_bin.Clear();
 #endif
-#endif
     
     return false;
 }
@@ -3904,7 +3923,9 @@ unsigned int GetDongleSN()
     
 wxString getFPR( bool bCopyToDesktop, bool &bCopyOK, bool bSGLock)
 {
-            
+
+#ifndef __OCPN__ANDROID__    
+   
             wxString msg1;
             wxString fpr_file;
             wxString fpr_dir = *GetpPrivateApplicationDataLocation(); //GetWritableDocumentsDir();
@@ -4102,6 +4123,60 @@ wxString getFPR( bool bCopyToDesktop, bool &bCopyOK, bool bSGLock)
             return _T("");
         else
             return fpr_file;
+#else   // android
+
+        // Get XFPR from the oeserverda helper utility.
+        //  The target binary executable
+        wxString cmd = g_sencutil_bin;
+
+//  Set up the parameter passed as the local app storage directory, and append "cache/" to it
+        wxString dataLoc = *GetpPrivateApplicationDataLocation();
+        wxFileName fn(dataLoc);
+        wxString dataDir = fn.GetPath(wxPATH_GET_SEPARATOR);
+        dataDir += _T("cache/");
+
+        wxString rootDir = fn.GetPath(wxPATH_GET_SEPARATOR);
+        
+        //  Set up the parameter passed to runtime environment as LD_LIBRARY_PATH
+        // This will be {dir of g_sencutil_bin}
+        wxFileName fnl(cmd);
+//        wxString libDir = fnl.GetPath();
+        wxString libDir = fnl.GetPath(wxPATH_GET_SEPARATOR) + _T("lib");
+      
+        wxLogMessage(_T("oernc_pi: Getting XFPR: Starting: ") + cmd );
+        wxLogMessage(_T("oernc_pi: Getting XFPR: Parms: ") + rootDir + _T(" ") + dataDir + _T(" ") + libDir );
+
+        qDebug() << "FPR3" << cmd.mb_str();
+        wxString result = callActivityMethod_s6s("createProcSync4", cmd, _T("-q"), rootDir, _T("-g"), dataDir, libDir);
+
+        wxLogMessage(_T("oernc_pi: Start Result: ") + result);
+
+        bool berror = true;            //TODO
+        
+        // Find the file...
+        wxArrayString files;
+        wxString lastFile = _T("NOT_FOUND");
+        time_t tmax = -1;
+        size_t nf = wxDir::GetAllFiles(dataDir, &files, _T("*.fpr"), wxDIR_FILES);
+        if(nf){
+            for(size_t i = 0 ; i < files.GetCount() ; i++){
+                qDebug() << "looking at FPR file: " << files[i].mb_str();
+                time_t t = ::wxFileModificationTime(files[i]);
+                if(t > tmax){
+                    tmax = t;
+                    lastFile = files[i];
+                }
+            }
+        }
+
+        qDebug() << "Selected FPR file: " << lastFile.mb_str();
+
+        if(::wxFileExists(lastFile))
+            return lastFile;
+        else
+            return _T("");
+
+#endif        
         
 }
 
@@ -4281,7 +4356,7 @@ void oesenc_pi_event_handler::OnNewDFPRClick( wxCommandEvent &event )
 
 void oesenc_pi_event_handler::OnNewFPRClick( wxCommandEvent &event )
 {
-#ifndef __OCPN__ANDROID__    
+#ifndef x__OCPN__ANDROID__    
     wxString msg = _("To obtain a chart set, you must generate a Unique System Identifier File.\n");
     msg += _("This file is also known as a\"fingerprint\" file.\n");
     msg += _("The fingerprint file contains information to uniquely identify this computer.\n\n");
@@ -4290,7 +4365,7 @@ void oesenc_pi_event_handler::OnNewFPRClick( wxCommandEvent &event )
 
     int ret = OCPNMessageBox_PlugIn(NULL, msg, _("oeSENC_PI Message"), wxYES_NO);
     
-    if(ret == wxID_YES){
+    if((ret == wxID_YES) || (ret == wxID_OK) ){
         wxString msg1;
         
         bool b_copyOK = false;
@@ -4436,10 +4511,25 @@ void oesenc_pi_event_handler::OnNewFPRClick( wxCommandEvent &event )
 void oesenc_pi_event_handler::OnManageShopClick( wxCommandEvent &event )
 {
     
-#ifndef __OCPN__ANDROID__
+#ifdef __OCPN__ANDROID__
+    
+    g_deviceInfo = callActivityMethod_vs("getDeviceInfo");
+    
+    wxStringTokenizer tkz(g_deviceInfo, _T("\n"));
+    while( tkz.HasMoreTokens() )
+    {
+        wxString s1 = tkz.GetNextToken();
+        if(wxNOT_FOUND != s1.Find(_T("systemName:"))){
+            int pos = s1.Find(_T("systemName:"));
+            g_systemName = s1.Mid(pos);
+        }
+    }
+    qDebug() << "systemName by deviceInfo: " << g_systemName.mb_str();
+#endif
 
         doShop();
-#else
+
+#if 0        
 
         // Get XFPR from the oeserverda helper utility.
         //  The target binary executable
@@ -4569,7 +4659,7 @@ void oesenc_pi_event_handler::OnManageShopClick( wxCommandEvent &event )
         m_eventTimer.Start(1000, wxTIMER_CONTINUOUS);
         
 
-#endif  // Android
+#endif  // 0
 
     
 }
@@ -5572,7 +5662,7 @@ void androidHideBusyIcon()
 
 void oesenc_pi::OnSetupOptions( void )
 {
-#ifdef __OCPN__ANDROID__
+#ifdef x__OCPN__ANDROID__
     m_pOptionsPage = AddOptionsPage( PI_OPTIONS_PARENT_CHARTS, _("oeSENC Charts") );
     if( ! m_pOptionsPage )
     {

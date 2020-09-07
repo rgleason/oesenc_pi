@@ -41,7 +41,6 @@ SET(PKG_NVR ${PACKAGE_NAME}-${PACKAGE_VERSION}-${PKG_RELEASE})
 SET(TARBALL_URL "https://dl.cloudsmith.io/public/@pkg_repo@/raw")
 SET(TARBALL_URL ${TARBALL_URL}/names/@name@/versions/@version@/@filename@)
 
-
 SET(API_DIR "${CMAKE_SOURCE_DIR}/api-16")
 SET(OCPN_USE_API_16 ON)
 
@@ -110,7 +109,7 @@ IF (NOT WIN32)
         ENDIF (CMAKE_SIZEOF_VOID_P MATCHES "8")
       ELSE (CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
         IF (CMAKE_SIZEOF_VOID_P MATCHES "8")
-          SET (ARCH "amd64")
+          SET (ARCH "x86_64")
         ELSE (CMAKE_SIZEOF_VOID_P MATCHES "8")
           SET (ARCH "i386")
         ENDIF (CMAKE_SIZEOF_VOID_P MATCHES "8")
@@ -156,6 +155,13 @@ IF (NOT WIN32)
     ENDIF(NOT DEFINED PACKAGE_FORMAT)
 
   ENDIF (UNIX AND NOT APPLE)
+  
+  IF(APPLE)
+    SET (ARCH "x86_64")
+  ENDIF(APPLE)
+
+else(NOT WIN32)  
+    SET (ARCH "x86_64")
 endif(NOT WIN32)
 
 IF (CMAKE_SYSTEM_PROCESSOR MATCHES "armhf")
@@ -209,13 +215,6 @@ if (OCPN_FLATPAK)
 endif()
 
 
-
-#  To build for android, use this cmake invocation..
-#$cmake -DUSE_GARMINHOST=OFF -D_wx_selected_config=androideabi-qt
-#-DCMAKE_TOOLCHAIN_FILE=../buildandroid/build_android.cmake
-#-DwxQt_Build=build_android_55_intl -DwxQt_Base=/home/dsr/Projects/wxqt/wxWidgets
-#-DQt_Base=/home/dsr/Projects/qt5bare -DQt_Build=build_release/qtbase ..
-
 IF(DEFINED _wx_selected_config)
 
 #  May be overridden
@@ -225,16 +224,13 @@ ENDIF(NOT DEFINED Qt_Build)
 
 MESSAGE (STATUS "selected config ${_wx_selected_config}")
 
-IF(_wx_selected_config MATCHES "androideabi-qt")
-  MESSAGE (STATUS "Building for wxQt-Android")
-  MESSAGE (STATUS "Qt_Base/Build: " ${Qt_Base} "/" ${Qt_Build})
-  MESSAGE (STATUS "wxQt_Base/Build: " ${wxQt_Base} "/" ${wxQt_Build})
+IF(_wx_selected_config MATCHES "androideabi-qt-arm64")
   SET(QT_ANDROID "ON")
-  SET(QT_LINUX "OFF")
-  SET(QT "ON")
-  ADD_DEFINITIONS("-Wno-inconsistent-missing-override -Wno-potentially-evaluated-expression")
-  SET(CMAKE_SKIP_BUILD_RPATH  TRUE)
-ENDIF(_wx_selected_config MATCHES "androideabi-qt")
+ENDIF(_wx_selected_config MATCHES "androideabi-qt-arm64")
+
+IF(_wx_selected_config MATCHES "androideabi-qt-armhf")
+  SET(QT_ANDROID "ON")
+ENDIF(_wx_selected_config MATCHES "androideabi-qt-armhf")
 
 ENDIF(DEFINED _wx_selected_config)
 
@@ -368,15 +364,16 @@ SET(SRC_JSON
             src/wxJSON/jsonwriter.cpp
         )
 
-IF(NOT QT_ANDROID)
-    SET(SRC_OSHOP 
+SET(SRC_OSHOP 
         src/ochartShop.cpp
         src/ochartShop.h
         )
-ENDIF(NOT QT_ANDROID)
 
-OPTION(OCPN_USE_CURL "Use Curl libraries" ON)
-ADD_DEFINITIONS(-D__OCPN_USE_CURL__)
+if( QT_ANDROID)
+    set(OCPN_USE_CURL OFF)
+else()
+    OPTION(OCPN_USE_CURL "Use Curl libraries" ON)
+endif()
 
 IF(WIN32)
     OPTION(OCPN_USE_EXTERN_CURL "Use external libcurl" OFF)
@@ -384,7 +381,9 @@ ELSE(WIN32)
     SET(OCPN_USE_EXTERN_CURL ON)
 ENDIF(WIN32)
 
-IF(NOT QT_ANDROID)
+IF(OCPN_USE_CURL)
+
+    ADD_DEFINITIONS(-D__OCPN_USE_CURL__)
 
     IF(OCPN_USE_EXTERN_CURL)
         FIND_PACKAGE(CURL REQUIRED)
@@ -420,7 +419,7 @@ IF(NOT QT_ANDROID)
     
     MESSAGE (STATUS "wxCurl configured...")
 
-ENDIF(NOT QT_ANDROID)
+ENDIF(OCPN_USE_CURL)
 
 IF(UNIX AND NOT APPLE)
  INCLUDE("cmake/FindTinyXML.cmake")
@@ -443,8 +442,12 @@ IF (QT_ANDROID )
     TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} ${OCPN_Core_LIBRARIES} )
     TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} "-lc++_shared")
     TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} "-lz" )
-    TARGET_LINK_LIBRARIES( ${PACKAGE_NAME}  ${Qt_Base}/${Qt_Build}/lib/libQt5Core.so )
-    TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} "${OCPN_Base}/${OCPN_Build}/libgorp.so" )
+    IF(_wx_selected_config MATCHES "androideabi-qt-arm64")
+      TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/${OCPN_Android_Common}/opencpn/API-117/libarm64/libgorp.so )
+    ELSE(_wx_selected_config MATCHES "androideabi-qt-arm64")
+      TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/${OCPN_Android_Common}/opencpn/API-117/libarmhf/libgorp.so )
+    ENDIF(_wx_selected_config MATCHES "androideabi-qt-arm64")
+  
 ENDIF(QT_ANDROID)
 
 
@@ -460,9 +463,9 @@ IF(WIN32)
 
 ENDIF(WIN32)
 
-IF(NOT APPLE)
+IF(NOT APPLE AND NOT QT_ANDROID )
 TARGET_LINK_LIBRARIES( ${PACKAGE_NAME} ${wxWidgets_LIBRARIES} )
-ENDIF(NOT APPLE)
+ENDIF(NOT APPLE AND NOT QT_ANDROID)
 
 
 
@@ -475,14 +478,19 @@ SET(PREFIX_PLUGINS ${LIB_INSTALL_DIR}/${PARENT})
 SET(PREFIX_PARENTBIN bin)
 SET(PREFIX_PARENTDATA ${PREFIX_DATA}/${PARENT})
 
+IF(QT_ANDROID)
+    INSTALL(FILES "buildandroid/oeserverda_arm/oeserverda"
+        PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        DESTINATION ${PREFIX_PARENTBIN})
+ELSE(QT_ANDROID)
 
 IF (ARCH MATCHES "amd64" OR ARCH MATCHES "x86_64")
     INSTALL(FILES "buildlinux64/oeserverd/oeserverd"
        PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
        DESTINATION ${PREFIX_PARENTBIN})
-    #INSTALL(FILES "buildlinux64/oeserverd/libsgllnx64-2.29.02.so"
-    #   PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-    #   DESTINATION ${PREFIX_PLUGINS})
+    INSTALL(FILES "buildlinux64/oeserverd/libsgllnx64-2.29.02.so"
+       PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+       DESTINATION ${PREFIX_PARENTBIN})
     #INSTALL(FILES "buildlinux64/oeserverd/libsgllnx64-2.29.02.so"
     #   PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     #   DESTINATION ${LIB_INSTALL_DIR})
@@ -494,14 +502,17 @@ ELSE (ARCH MATCHES "amd64" OR ARCH MATCHES "x86_64")
             INSTALL(FILES "buildlinuxarm/oeserverd/oeserverd"
                 PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
                 DESTINATION ${PREFIX_PARENTBIN})
-            #INSTALL(FILES "buildlinuxarm/oeserverd/libsglarmhf32-2.30.0.0.so"
-            #    PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            #    DESTINATION ${PREFIX_PLUGINS})
+            INSTALL(FILES "buildlinuxarm/oeserverd/libsglarmhf32-2.30.0.0.so"
+                PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+                DESTINATION ${PREFIX_PARENTBIN})
             #INSTALL(FILES "buildlinuxarm/oeserverd/libsglarmhf32-2.30.0.0.so"
             #    PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             #    DESTINATION ${LIB_INSTALL_DIR})
         ELSE (ARCH MATCHES "armhf" )
             INSTALL(FILES "buildlinuxarm64/oeserverd/oeserverd"
+                PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+                DESTINATION ${PREFIX_PARENTBIN})
+            INSTALL(FILES "buildlinuxarm64/oeserverd/libsglarm64-2.31.0.0.so"
                 PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
                 DESTINATION ${PREFIX_PARENTBIN})
         ENDIF (ARCH MATCHES "armhf" )
@@ -510,9 +521,9 @@ ELSE (ARCH MATCHES "amd64" OR ARCH MATCHES "x86_64")
         INSTALL(FILES "buildlinux/oeserverd/oeserverd"
           PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
           DESTINATION ${PREFIX_PARENTBIN})
-        #INSTALL(FILES "buildlinux/oeserverd/libsgllnx-2.29.0.1.so"
-        #  PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        #  DESTINATION ${PREFIX_PLUGINS})
+        INSTALL(FILES "buildlinux/oeserverd/libsgllnx-2.29.0.1.so"
+          PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+          DESTINATION ${PREFIX_PARENTBIN})
         #INSTALL(FILES "buildlinux/oeserverd/libsgllnx-2.29.0.1.so"
         #  PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         #  DESTINATION ${LIB_INSTALL_DIR})
@@ -521,19 +532,21 @@ ELSE (ARCH MATCHES "amd64" OR ARCH MATCHES "x86_64")
 
 ENDIF (ARCH MATCHES "amd64" OR ARCH MATCHES "x86_64")
 
-IF(PACKAGE_FORMAT MATCHES "DEB")
+IF(PACKAGE_FORMAT MATCHES "DEB" AND NOT QT_ANDROID)
         
         INSTALL(FILES "buildlinux/oeserverd/98-sglock.rules"
           PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ 
           DESTINATION "/etc/udev/rules.d")
 
-ENDIF(PACKAGE_FORMAT MATCHES "DEB")
+ENDIF(PACKAGE_FORMAT MATCHES "DEB" AND NOT QT_ANDROID)
 
 
 
 INSTALL(FILES "src/rrc_eula_ChartSetsForOpenCPN-v16-12.txt"
       PERMISSIONS OWNER_READ GROUP_READ WORLD_READ
       DESTINATION ${PREFIX_PARENTDATA}/plugins/${PACKAGE_NAME} )
+
+ENDIF(QT_ANDROID)
 
 ENDIF(UNIX AND NOT APPLE)
 
